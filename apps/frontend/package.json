@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build"
+    "build": "rsbuild build && node ../../scripts/patch-frontend-worker.mjs",
+    "deploy": "npm run build && wrangler deploy --no-bundle"
   },
   "dependencies": {
     "@orpc/client": "2.0.0-beta.3",
@@ -22,6 +23,7 @@
     "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4"
   }
 }

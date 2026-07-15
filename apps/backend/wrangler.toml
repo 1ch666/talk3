@@ -8,8 +8,8 @@ compatibility_flags = ["nodejs_compat"]
 
 [[d1_databases]]
 binding = "DB"
-database_name = "backend-db"
-database_id = "local"
+database_name = "talkroom-db"
+database_id = "38616823-7686-4b06-a13d-bb441fb3ca4c"
 migrations_dir = "migrations"
 
 [vars]
