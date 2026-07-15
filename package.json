@@ -1,22 +1,24 @@
 {
-  "name": "chat",
+  "name": "talk",
+  "version": "0.0.1",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "gh-pages -d dist"
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @talk/backend\" \"npm run dev -w @talk/frontend\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc --noEmit -p packages/shared && tsc --noEmit -p apps/backend && tsc --noEmit -p apps/frontend",
+    "test": "tsx --test apps/backend/src/*.test.ts packages/shared/src/*.test.ts",
+    "lint": "oxlint apps packages"
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0",
-    "vite": "^8.0.0-beta.13"
-  },
-  "overrides": {
-    "vite": "^8.0.0-beta.13"
-  },
-  "dependencies": {
-    "firebase": "^12.10.0"
+    "@types/bun": "^1.3.11",
+    "concurrently": "^9.2.1",
+    "oxlint": "^1.73.0",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2"
   }
 }
