@@ -64,11 +64,7 @@ function RouteComponent() {
 
       <section className="hero-grid">
         <div className="hero-copy">
-          <p className="eyebrow"><span /> 不必註冊，點一下就能聊</p>
-          <h1>房間不用想，<br /><em>我們替你產生。</em></h1>
-          <p className="hero-lead">
-            建立按鈕會自動產生不重複的 10 碼房號。把房號或邀請連結分享給朋友，就能立即加入同一個聊天室。
-          </p>
+          <h1>歡迎來到 <em>TalkRoom</em></h1>
           <div className="trust-row" aria-label="產品特點">
             <span>安全亂碼</span><i />
             <span>即時同步</span><i />

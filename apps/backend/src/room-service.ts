@@ -17,6 +17,10 @@ export async function findRoom(db: Database, code: string): Promise<Room | null>
   return row ?? null;
 }
 
+export async function deleteRoom(db: Database, code: string): Promise<void> {
+  await db.delete(rooms).where(eq(rooms.code, code)).run();
+}
+
 export async function listRoomMessages(db: Database, roomCode: string, limit: number): Promise<ChatMessage[]> {
   const rows = await db
     .select()

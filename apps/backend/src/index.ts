@@ -23,7 +23,7 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.ra
 app.use("/rpc/*", async (c, next) => {
   const { matched, response } = await orpcHandler.handle(c.req.raw, {
     prefix: "/rpc",
-    context: { db: createDb(c.env.DB) },
+    context: { db: createDb(c.env.DB), chatRooms: c.env.CHAT_ROOMS },
   });
   if (matched) return c.newResponse(response.body, response);
   await next();
