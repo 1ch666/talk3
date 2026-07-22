@@ -17,6 +17,7 @@ import { createDb } from "./db";
 import { findActiveImage, findRoom } from "./room-service";
 import { ChatRoom } from "./chat-room";
 import { detectImageMime } from "./image-validation";
+import { IMAGE_UPLOAD_UNAVAILABLE_MESSAGE, writeExpiringImage } from "./image-storage";
 
 type Env = { Bindings: CloudflareBindings };
 const app = new Hono<Env>();
@@ -77,7 +78,13 @@ app.post("/api/rooms/:code/images", async (c) => {
 
   const imageId = crypto.randomUUID();
   const key = `rooms/${code.data}/${imageId}`;
-  await c.env.IMAGES.put(key, buffer, { metadata: { mimeType: detectedMime, size: file.size } });
+  const stored = await writeExpiringImage(
+    (imageKey, value, options) => c.env.IMAGES.put(imageKey, value, options),
+    key,
+    buffer,
+    { mimeType: detectedMime, size: file.size },
+  );
+  if (!stored) return c.json({ error: IMAGE_UPLOAD_UNAVAILABLE_MESSAGE }, 503);
   const response = await roomStub(c.env, code.data).fetch("https://chat-room.internal/messages/image", {
     method: "POST",
     headers: { "content-type": "application/json" },

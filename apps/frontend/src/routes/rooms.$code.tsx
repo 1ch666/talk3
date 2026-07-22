@@ -209,10 +209,12 @@ function RoomPage() {
         form.set("senderKey", identity.key);
         form.set("text", trimmed);
         if (replyingTo) form.set("replyToMessageId", replyingTo.id);
-        const response = await fetch(`/api/rooms/${code}/images`, { method: "POST", body: form });
-        const payload: unknown = await response.json();
+        const response = await fetch(`/api/rooms/${code}/images`, { method: "POST", body: form }).catch(() => {
+          throw new Error("暫時無法上傳");
+        });
+        const payload: unknown = await response.json().catch(() => null);
         if (!response.ok) {
-          const message = payload && typeof payload === "object" && "error" in payload ? String(payload.error) : "圖片傳送失敗";
+          const message = payload && typeof payload === "object" && "error" in payload ? String(payload.error) : "暫時無法上傳";
           throw new Error(message);
         }
         const message = messageSchema.parse(payload);
