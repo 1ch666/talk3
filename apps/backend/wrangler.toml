@@ -12,9 +12,9 @@ database_name = "talkroom-db"
 database_id = "38616823-7686-4b06-a13d-bb441fb3ca4c"
 migrations_dir = "migrations"
 
-[[r2_buckets]]
+[[kv_namespaces]]
 binding = "IMAGES"
-bucket_name = "talkroom-images"
+id = "5c34fdeb15a84e299d9d0d87dafdac8b"
 
 [vars]
 BETTER_AUTH_URL = ""

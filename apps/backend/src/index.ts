@@ -77,7 +77,7 @@ app.post("/api/rooms/:code/images", async (c) => {
 
   const imageId = crypto.randomUUID();
   const key = `rooms/${code.data}/${imageId}`;
-  await c.env.IMAGES.put(key, buffer, { httpMetadata: { contentType: detectedMime, contentDisposition: "inline" } });
+  await c.env.IMAGES.put(key, buffer, { metadata: { mimeType: detectedMime, size: file.size } });
   const response = await roomStub(c.env, code.data).fetch("https://chat-room.internal/messages/image", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -107,16 +107,15 @@ app.get("/api/rooms/:code/images/:imageId", async (c) => {
   if (!(await findRoom(createDb(c.env.DB), code.data))) return c.text("Not found", 404);
   const image = await findActiveImage(createDb(c.env.DB), code.data, imageId.data);
   if (!image) return c.text("Not found", 404);
-  const object = await c.env.IMAGES.get(`rooms/${code.data}/${imageId.data}`);
+  const object = await c.env.IMAGES.get(`rooms/${code.data}/${imageId.data}`, "arrayBuffer");
   if (!object) return c.text("Not found", 404);
   const headers = new Headers();
-  object.writeHttpMetadata(headers);
   headers.set("content-type", image.mimeType);
   headers.set("content-length", String(image.size));
-  headers.set("etag", object.httpEtag);
+  headers.set("etag", `"${imageId.data}"`);
   headers.set("cache-control", "private, max-age=60");
   headers.set("x-content-type-options", "nosniff");
-  return new Response(object.body, { headers });
+  return new Response(object, { headers });
 });
 
 app.get("/health", (c) => c.json({ status: "ok", service: "talk-backend" }));

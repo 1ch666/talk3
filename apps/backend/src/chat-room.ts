@@ -182,8 +182,10 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
     let cursor: string | undefined;
     do {
       const listed = await this.env.IMAGES.list({ prefix, cursor, limit: 1000 });
-      if (listed.objects.length > 0) await this.env.IMAGES.delete(listed.objects.map((object) => object.key));
-      cursor = listed.truncated ? listed.cursor : undefined;
+      if (listed.keys.length > 0) {
+        await Promise.all(listed.keys.map((key) => this.env.IMAGES.delete(key.name)));
+      }
+      cursor = listed.list_complete ? undefined : listed.cursor;
     } while (cursor);
   }
 
