@@ -12,6 +12,10 @@ database_name = "talkroom-db"
 database_id = "38616823-7686-4b06-a13d-bb441fb3ca4c"
 migrations_dir = "migrations"
 
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "talkroom-images"
+
 [vars]
 BETTER_AUTH_URL = ""
 BETTER_AUTH_SECRET = ""
@@ -23,3 +27,6 @@ class_name = "ChatRoom"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ChatRoom"]
+
+[observability]
+enabled = true
