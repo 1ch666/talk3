@@ -12,7 +12,6 @@ import {
   senderKeySchema,
 } from "@talk/shared";
 import { appRouter } from "./handler";
-import { createAuth } from "./auth";
 import { createDb } from "./db";
 import { findActiveImage, findRoom } from "./room-service";
 import { ChatRoom } from "./chat-room";
@@ -28,15 +27,38 @@ function roomStub(env: CloudflareBindings, code: string) {
   return env.CHAT_ROOMS.get(env.CHAT_ROOMS.idFromName(code));
 }
 
-app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
-
 app.use("/rpc/*", async (c, next) => {
+  const lengthHeader = c.req.header("content-length");
+  const declaredLength = Number(lengthHeader);
+  if (c.req.method === "POST" && (!lengthHeader || !Number.isFinite(declaredLength) || declaredLength <= 0)) {
+    return c.json({ error: "A valid Content-Length header is required" }, 411);
+  }
+  if (declaredLength > 64 * 1024) {
+    return c.json({ error: "Request body is too large" }, 413);
+  }
+
   const pathname = new URL(c.req.url).pathname;
+  const key = await roomCreateRateLimitKey(c.req.raw);
+  const generalLimit = await c.env.API_RATE_LIMITER.limit({ key });
+  if (!generalLimit.success) {
+    c.header("Retry-After", "60");
+    return c.json({ error: "Too many requests" }, 429);
+  }
+
   if (c.req.method === "POST" && pathname === "/rpc/rooms/create") {
-    const key = await roomCreateRateLimitKey(c.req.raw);
     const { success } = await c.env.ROOM_CREATE_RATE_LIMITER.limit({ key });
     if (!success) {
       c.header("Retry-After", "60");
+      return c.json({ error: ROOM_CREATE_RATE_LIMIT_MESSAGE }, 429);
+    }
+
+    const exactResponse = await roomStub(c.env, `rate:${key}`).fetch("https://chat-room.internal/rate-limit/room-create", {
+      method: "POST",
+    });
+    if (!exactResponse.ok) return c.json({ error: "\u66ab\u6642\u7121\u6cd5\u5efa\u7acb\u623f\u9593\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002" }, 503);
+    const exact = await exactResponse.json<{ success: boolean; retryAfterSeconds: number }>();
+    if (!exact.success) {
+      c.header("Retry-After", String(exact.retryAfterSeconds));
       return c.json({ error: ROOM_CREATE_RATE_LIMIT_MESSAGE }, 429);
     }
   }
@@ -51,6 +73,12 @@ app.use("/rpc/*", async (c, next) => {
 
 app.get("/api/rooms/:code/socket", async (c) => {
   if (c.req.header("Upgrade")?.toLowerCase() !== "websocket") return c.text("Expected WebSocket upgrade", 426);
+  const socketKey = await roomCreateRateLimitKey(c.req.raw);
+  const socketLimit = await c.env.SOCKET_RATE_LIMITER.limit({ key: socketKey });
+  if (!socketLimit.success) {
+    c.header("Retry-After", "60");
+    return c.text("Too many connection attempts", 429);
+  }
   const codeResult = roomCodeSchema.safeParse(c.req.param("code"));
   const nameResult = displayNameSchema.safeParse(c.req.query("name"));
   if (!codeResult.success || !nameResult.success) return c.text("Invalid room or display name", 400);
@@ -62,6 +90,21 @@ app.get("/api/rooms/:code/socket", async (c) => {
 });
 
 app.post("/api/rooms/:code/images", async (c) => {
+  const uploadKey = await roomCreateRateLimitKey(c.req.raw);
+  const uploadLimit = await c.env.ROOM_IMAGE_RATE_LIMITER.limit({ key: uploadKey });
+  if (!uploadLimit.success) {
+    c.header("Retry-After", "60");
+    return c.json({ error: "\u5716\u7247\u4e0a\u50b3\u592a\u983b\u7e41\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002" }, 429);
+  }
+  const exactResponse = await roomStub(c.env, `rate:${uploadKey}`).fetch("https://chat-room.internal/rate-limit/image-upload", {
+    method: "POST",
+  });
+  if (!exactResponse.ok) return c.json({ error: IMAGE_UPLOAD_UNAVAILABLE_MESSAGE }, 503);
+  const exact = await exactResponse.json<{ success: boolean; retryAfterSeconds: number }>();
+  if (!exact.success) {
+    c.header("Retry-After", String(exact.retryAfterSeconds));
+    return c.json({ error: "\u5716\u7247\u4e0a\u50b3\u592a\u983b\u7e41\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002" }, 429);
+  }
   const code = roomCodeSchema.safeParse(c.req.param("code"));
   if (!code.success) return c.json({ error: "無效的房號" }, 400);
   const declaredLength = Number(c.req.header("content-length") ?? 0);
@@ -113,7 +156,7 @@ app.post("/api/rooms/:code/images", async (c) => {
   if (!response.ok) {
     await c.env.IMAGES.delete(key);
     const error = payload && typeof payload === "object" && "error" in payload ? String(payload.error) : "圖片傳送失敗";
-    return c.json({ error }, response.status === 400 ? 400 : 500);
+    return c.json({ error }, response.status === 400 || response.status === 429 ? response.status : 500);
   }
   return c.json(messageSchema.parse(payload), 201);
 });

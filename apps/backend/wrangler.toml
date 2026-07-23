@@ -24,9 +24,29 @@ namespace_id = "2026072301"
   limit = 5
   period = 60
 
-[vars]
-BETTER_AUTH_URL = ""
-BETTER_AUTH_SECRET = ""
+[[ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "2026072302"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60
+
+[[ratelimits]]
+name = "ROOM_IMAGE_RATE_LIMITER"
+namespace_id = "2026072303"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
+
+[[ratelimits]]
+name = "SOCKET_RATE_LIMITER"
+namespace_id = "2026072304"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
 
 [[durable_objects.bindings]]
 name = "CHAT_ROOMS"

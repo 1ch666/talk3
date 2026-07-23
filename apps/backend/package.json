@@ -8,21 +8,17 @@
     "build": "node ../../scripts/build-worker.mjs",
     "deploy": "npm run build && wrangler deploy dist/worker.js --no-bundle",
     "types": "wrangler types --env-interface CloudflareBindings --include-runtime=false",
-    "migrate": "wrangler d1 migrations apply talkroom-db",
-    "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "migrate": "wrangler d1 migrations apply talkroom-db"
   },
   "dependencies": {
     "@orpc/server": "2.0.0-beta.3",
     "@talk/shared": "*",
-    "better-auth": "^1.5",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.30",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260722.1",
-    "drizzle-kit": "^0.31.10",
     "wrangler": "^4.113.0"
   }
 }

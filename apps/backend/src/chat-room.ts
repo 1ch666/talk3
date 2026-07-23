@@ -16,9 +16,12 @@ import { z } from "zod";
 import { createDb } from "./db";
 import { createRoomMessage, deleteRoom, findRoom, listRoomImageIds, recallRoomMessage } from "./room-service";
 import { cleanupEmptyRoom, EMPTY_ROOM_GRACE_MS, hasActiveRoomSockets } from "./room-lifecycle";
+import { consumeFixedWindowPermit, consumeRoomCreatePermit, IMAGE_UPLOAD_LIMIT, ROOM_MESSAGE_LIMIT, type RoomCreateRateState } from "./room-create-rate-limit";
 
 type Session = { roomCode: string; senderName: string };
 const ROOM_CODE_STORAGE_KEY = "roomCode";
+const ROOM_CREATE_RATE_STORAGE_KEY = "roomCreateRate";
+const IMAGE_UPLOAD_RATE_STORAGE_KEY = "imageUploadRate";
 
 const imageMessageInputSchema = z.object({
   roomCode: roomCodeSchema,
@@ -47,9 +50,17 @@ function errorLabel(error: unknown): string {
 
 export class ChatRoom extends DurableObject<CloudflareBindings> {
   private operationQueue: Promise<void> = Promise.resolve();
+  private roomMessageRate: RoomCreateRateState | undefined;
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (request.method === "POST" && url.pathname === "/rate-limit/room-create") {
+      return this.serialized(() => this.limitRoomCreation());
+    }
+    if (request.method === "POST" && url.pathname === "/rate-limit/image-upload") {
+      return this.serialized(() => this.limitPersistentAction(IMAGE_UPLOAD_RATE_STORAGE_KEY, IMAGE_UPLOAD_LIMIT));
+    }
+
     if (request.method === "POST" && url.pathname === "/lifecycle/created") {
       const body = (await request.json()) as { roomCode?: unknown };
       const roomCode = roomCodeSchema.parse(body.roomCode);
@@ -96,7 +107,7 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
       const event = socketClientEventSchema.parse(JSON.parse(raw));
       await this.serialized(async () => {
         if (event.type === "message") {
-          await this.createAndBroadcast({
+          const response = await this.createAndBroadcast({
             roomCode: session.roomCode,
             senderName: session.senderName,
             senderId: event.senderId,
@@ -104,6 +115,10 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
             text: event.text,
             replyToMessageId: event.replyToMessageId,
           });
+          if (!response.ok) {
+            const payload = await response.json<{ error?: string }>();
+            socket.send(JSON.stringify({ type: "error", message: payload.error ?? "Message rejected" } satisfies SocketServerEvent));
+          }
         } else {
           await this.recallAndBroadcast({
             roomCode: session.roomCode,
@@ -149,7 +164,38 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
     try { return await operation(); } finally { release(); }
   }
 
+  private async limitRoomCreation(): Promise<Response> {
+    const state = await this.ctx.storage.get<RoomCreateRateState>(ROOM_CREATE_RATE_STORAGE_KEY);
+    const decision = consumeRoomCreatePermit(state, Date.now());
+    return this.persistRateDecision(ROOM_CREATE_RATE_STORAGE_KEY, decision);
+  }
+
+  private async limitPersistentAction(storageKey: string, limit: number): Promise<Response> {
+    const state = await this.ctx.storage.get<RoomCreateRateState>(storageKey);
+    const decision = consumeFixedWindowPermit(state, Date.now(), limit);
+    return this.persistRateDecision(storageKey, decision);
+  }
+
+  private async persistRateDecision(
+    storageKey: string,
+    decision: ReturnType<typeof consumeFixedWindowPermit>,
+  ): Promise<Response> {
+    if (decision.allowed) {
+      await this.ctx.storage.put(storageKey, decision.state);
+      await this.ctx.storage.setAlarm(decision.state.resetAt + 1_000);
+    }
+    return Response.json({ success: decision.allowed, retryAfterSeconds: decision.retryAfterSeconds });
+  }
+
   private async createAndBroadcast(input: Parameters<typeof createRoomMessage>[1]): Promise<Response> {
+    const permit = consumeFixedWindowPermit(this.roomMessageRate, Date.now(), ROOM_MESSAGE_LIMIT);
+    this.roomMessageRate = permit.state;
+    if (!permit.allowed) {
+      return Response.json(
+        { error: "\u8a0a\u606f\u50b3\u9001\u592a\u983b\u7e41\uff0c\u8acb\u7a0d\u5f8c\u518d\u8a66\u3002", code: "MESSAGE_RATE_LIMITED" },
+        { status: 429, headers: { "Retry-After": String(permit.retryAfterSeconds) } },
+      );
+    }
     try {
       const message = await createRoomMessage(createDb(this.env.DB), input);
       this.broadcast({ type: "message", message });
