@@ -14,7 +14,7 @@ import {
 } from "@talk/shared";
 import { z } from "zod";
 import { createDb } from "./db";
-import { createRoomMessage, deleteRoom, findRoom, recallRoomMessage } from "./room-service";
+import { createRoomMessage, deleteRoom, findRoom, listRoomImageIds, recallRoomMessage } from "./room-service";
 import { cleanupEmptyRoom, EMPTY_ROOM_GRACE_MS, hasActiveRoomSockets } from "./room-lifecycle";
 
 type Session = { roomCode: string; senderName: string };
@@ -133,8 +133,9 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
       sockets: this.ctx.getWebSockets(),
       roomCode,
       deleteRoom: async (code) => {
-        await this.deleteImagePrefix(`rooms/${code}/`);
+        const imageIds = await listRoomImageIds(db, code);
         await deleteRoom(db, code);
+        await Promise.allSettled(imageIds.map((imageId) => this.env.IMAGES.delete(`rooms/${code}/${imageId}`)));
       },
       clearState: () => this.ctx.storage.deleteAll(),
     });
@@ -176,17 +177,6 @@ export class ChatRoom extends DurableObject<CloudflareBindings> {
     for (const socket of this.ctx.getWebSockets()) {
       try { socket.send(payload); } catch { /* runtime removes disconnected sockets */ }
     }
-  }
-
-  private async deleteImagePrefix(prefix: string): Promise<void> {
-    let cursor: string | undefined;
-    do {
-      const listed = await this.env.IMAGES.list({ prefix, cursor, limit: 1000 });
-      if (listed.keys.length > 0) {
-        await Promise.all(listed.keys.map((key) => this.env.IMAGES.delete(key.name)));
-      }
-      cursor = listed.list_complete ? undefined : listed.cursor;
-    } while (cursor);
   }
 
   private async scheduleCleanupIfEmpty(disconnectedSocket: WebSocket): Promise<void> {

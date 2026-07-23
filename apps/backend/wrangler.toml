@@ -16,6 +16,14 @@ migrations_dir = "migrations"
 binding = "IMAGES"
 id = "5c34fdeb15a84e299d9d0d87dafdac8b"
 
+[[ratelimits]]
+name = "ROOM_CREATE_RATE_LIMITER"
+namespace_id = "2026072301"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60
+
 [vars]
 BETTER_AUTH_URL = ""
 BETTER_AUTH_SECRET = ""

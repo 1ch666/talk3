@@ -18,6 +18,7 @@ import { findActiveImage, findRoom } from "./room-service";
 import { ChatRoom } from "./chat-room";
 import { detectImageMime } from "./image-validation";
 import { IMAGE_UPLOAD_UNAVAILABLE_MESSAGE, writeExpiringImage } from "./image-storage";
+import { ROOM_CREATE_RATE_LIMIT_MESSAGE, roomCreateRateLimitKey } from "./room-create-rate-limit";
 
 type Env = { Bindings: CloudflareBindings };
 const app = new Hono<Env>();
@@ -30,6 +31,16 @@ function roomStub(env: CloudflareBindings, code: string) {
 app.on(["GET", "POST"], "/api/auth/*", (c) => createAuth(c.env).handler(c.req.raw));
 
 app.use("/rpc/*", async (c, next) => {
+  const pathname = new URL(c.req.url).pathname;
+  if (c.req.method === "POST" && pathname === "/rpc/rooms/create") {
+    const key = await roomCreateRateLimitKey(c.req.raw);
+    const { success } = await c.env.ROOM_CREATE_RATE_LIMITER.limit({ key });
+    if (!success) {
+      c.header("Retry-After", "60");
+      return c.json({ error: ROOM_CREATE_RATE_LIMIT_MESSAGE }, 429);
+    }
+  }
+
   const { matched, response } = await orpcHandler.handle(c.req.raw, {
     prefix: "/rpc",
     context: { db: createDb(c.env.DB), chatRooms: c.env.CHAT_ROOMS },

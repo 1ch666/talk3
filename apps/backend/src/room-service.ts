@@ -89,6 +89,14 @@ export async function deleteRoom(db: Database, code: string): Promise<void> {
   await db.delete(rooms).where(eq(rooms.code, code)).run();
 }
 
+export async function listRoomImageIds(db: Database, roomCode: string): Promise<string[]> {
+  const rows = await db.select({ imageId: messages.imageId }).from(messages).where(and(
+    eq(messages.roomCode, roomCode),
+    isNotNull(messages.imageId),
+  )).all();
+  return rows.flatMap((row) => row.imageId ? [row.imageId] : []);
+}
+
 export async function listRoomMessages(db: Database, roomCode: string, limit: number): Promise<ChatMessage[]> {
   const rows = await db.select().from(messages).where(eq(messages.roomCode, roomCode))
     .orderBy(desc(messages.createdAt)).limit(limit).all();
